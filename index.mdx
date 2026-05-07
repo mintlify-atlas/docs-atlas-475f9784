@@ -1,133 +1,55 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
-icon: 'star'
+title: "SkillSync: Track student Codeforces progress"
+description: "SkillSync monitors students' competitive programming activity on Codeforces — with automated daily sync, analytics dashboards, and inactivity email alerts."
 ---
 
-## Setting up
+SkillSync is a full-stack platform for educators and coaches to track students' competitive programming progress on Codeforces. Add students by their Codeforces handle, and SkillSync automatically pulls their contest history, submission data, and rating changes every day. View per-student dashboards with heatmaps, difficulty distributions, and AI-style analytics — and get automatic email nudges when a student goes quiet.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Set up the backend and frontend and start tracking students in minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Student Management" icon="users" href="/features/student-management">
+    Add, edit, search, and delete students from the dashboard.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Codeforces Sync" icon="rotate" href="/features/codeforces-sync">
+    Learn how automated and manual sync keeps student data fresh.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Analytics Dashboard" icon="chart-line" href="/features/analytics-dashboard">
+    Explore heatmaps, rating charts, difficulty distributions, and more.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## How it works
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Add a student">
+    Enter the student's name, email, phone number, and their Codeforces handle. SkillSync immediately fetches their profile, contest history, and submission data from the Codeforces API.
+  </Step>
+  <Step title="Data syncs automatically">
+    A scheduled cron job runs every day to refresh every student's data. You can also trigger a manual sync per student or for all students at once from the dashboard.
+  </Step>
+  <Step title="View analytics">
+    Click any student to open their personal dashboard — rating history charts, submission heatmaps, topic breakdowns, consistency scores, and predicted rating.
+  </Step>
+  <Step title="Get inactivity alerts">
+    If a student hasn't solved a problem in 7 or more days, SkillSync automatically sends them a reminder email. You can toggle this per student.
+  </Step>
+</Steps>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Key features
 
-## Make your content agent ready
-
-Make your docs work for humans and AI agents alike.
-
-<Columns cols={2}>
-  <Card
-    title="Prompt component"
-    icon="robot"
-    href="/agent-ready/prompt"
-  >
-    Embed shareable AI prompts readers can copy or open in Cursor.
+<CardGroup cols={2}>
+  <Card title="Inactivity email alerts" icon="envelope" href="/features/inactivity-alerts">
+    Automatic Brevo-powered emails remind inactive students to keep practicing.
   </Card>
-  <Card
-    title="Visibility"
-    icon="eye"
-    href="/agent-ready/visibility"
-  >
-    Show different content to humans and agents reading your docs.
+  <Card title="Deployment guide" icon="cloud" href="/deployment">
+    Deploy the backend on Render, frontend on Vercel, and database on MongoDB Atlas.
   </Card>
-  <Card
-    title="Contextual menu"
-    icon="bolt"
-    href="/agent-ready/contextual"
-  >
-    Give readers one-click access to Claude, ChatGPT, Cursor, and more.
+  <Card title="API Reference" icon="code" href="/api/students/overview">
+    Full REST API docs for students, Codeforces sync, and system endpoints.
   </Card>
-  <Card
-    title="AI coding tools"
-    icon="wand-magic-sparkles"
-    href="/ai-tools/claude-code"
-  >
-    Set up Claude Code, Cursor, or Windsurf with Mintlify's skill.
+  <Card title="Configuration" icon="gear" href="/configuration/environment-variables">
+    Configure environment variables, cron secrets, and email credentials.
   </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+</CardGroup>

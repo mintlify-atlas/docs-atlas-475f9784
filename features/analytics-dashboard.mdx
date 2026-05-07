@@ -1,0 +1,103 @@
+---
+title: "Student analytics dashboard and progress charts"
+description: "View per-student analytics in SkillSync: submission heatmaps, rating history, difficulty distributions, topic breakdowns, and AI-style metrics."
+---
+
+Clicking **Stats** on any student row navigates to `/student/:handle`, the per-student analytics page. The page loads three independent data sets in parallel — performance stats for the selected time window, all-time activity data for the heatmap and streak, and full contest history — then renders them across a set of charts, cards, and tables. A manual **Sync** button in the header lets you refresh the student's data on demand before viewing analytics.
+
+## Performance overview
+
+Four metric cards summarize the student's activity for a selected time window. Use the dropdown in the section header to switch between **Last 7 days**, **Last 30 days**, **Last 90 days**, and **Last year**.
+
+<CardGroup cols={2}>
+  <Card title="Problems solved" icon="check-circle">
+    Count of unique accepted problems in the selected time window. Each problem is counted once regardless of how many attempts it took.
+  </Card>
+  <Card title="Average pace" icon="gauge">
+    Problems solved per day, computed as `totalSolved / days` for the selected window.
+  </Card>
+  <Card title="Submissions" icon="clipboard-list">
+    Total submission count in the window, including both accepted and rejected attempts.
+  </Card>
+  <Card title="Hardest solved" icon="award">
+    The highest-rated Codeforces problem the student solved in the selected window, shown as a rating number and problem name.
+  </Card>
+</CardGroup>
+
+## Analytics insight strip
+
+Below the performance cards, a horizontal strip of five chips shows all-time metrics that are not affected by the time window filter.
+
+| Metric | Description |
+|---|---|
+| **Current streak** | Number of consecutive calendar days with at least one submission, counted backwards from today |
+| **Acceptance rate** | `(accepted submissions / total submissions) × 100` across all time |
+| **Consistency score** | Integer from 0 to 100, computed as `min(100, activeDays × 0.45 + avgPerDay × 12 + longestStreak × 2)` |
+| **Predicted rating** | `currentRating + consistencyScore × 0.8 + learningVelocity × 0.25` — an indicative estimate, not an official Codeforces figure |
+| **Learning velocity** | Change in average solved-problem rating from the student's first active month to their most recent active month |
+
+## Submission heatmap
+
+A GitHub-style calendar heatmap visualises daily submission activity. Each cell represents one day; color intensity reflects submission volume:
+
+| Class | Submissions |
+|---|---|
+| Empty (no color) | 0 |
+| Level 1 | 1 |
+| Level 2 | 2 – 3 |
+| Level 3 | 4 – 5 |
+| Level 4 | 6 or more |
+
+Hovering a cell shows the date, total submissions, and accepted count for that day. Use the filter dropdown to display **Last 3 months**, **Last 6 months**, **Last 12 months**, or a specific calendar year. The heatmap always draws from all-time submission data so switching the performance window above does not affect it.
+
+## Difficulty distribution chart
+
+A vertical bar chart groups accepted problems by their Codeforces rating bucket (800, 900, 1000, …). Each bar shows how many unique problems the student solved at that difficulty level within the selected time window. Three summary cards beneath the chart show the average solved rating, the peak problem rating, and the count of advanced problems (rated 1800 or above).
+
+## Topic breakdown
+
+A horizontal bar chart lists up to 15 Codeforces problem tags sorted by the number of problems solved in that category. Each bar's label also shows the average rating of problems solved in that topic. Three summary rows above the chart highlight the most-solved topic, the topic with the highest average difficulty, and the total number of distinct topics attempted.
+
+## Rating history chart
+
+A line chart plots `newRating` after each rated contest. The y-axis uses an auto-scaled domain so small rating changes are visible. Hovering a point shows a tooltip with the contest name, date, rank, old rating, new rating, and rating change. Use the filter dropdown to limit the chart to **Last 3 months**, **Last 6 months**, **Last 12 months**, a specific year, or **All time**.
+
+## Contest history table
+
+Below the rating chart, a table lists every contest entry for the selected filter period (most recent first). Columns are:
+
+| Column | Description |
+|---|---|
+| **Contest** | Contest name, linked to the Codeforces contest page |
+| **Date** | Date of the rating update |
+| **Rank** | The student's finishing rank |
+| **Rating change** | `oldRating → newRating` with a colored delta pill (+/−) |
+| **Solved** | Problems solved out of total problems in that contest (e.g. `3/6`). Falls back to just the solved count if the total is unavailable. |
+
+## Student persona
+
+SkillSync assigns each student a persona based on their all-time stats. Personas are evaluated in priority order:
+
+<Steps>
+  <Step title="Legendary Problem Hunter">
+    Hardest solved problem is rated 3000 or above.
+  </Step>
+  <Step title="High Difficulty Explorer">
+    Hardest solved problem is rated 2200 or above.
+  </Step>
+  <Step title="Consistency Grinder">
+    Consistency score is 75 or above.
+  </Step>
+  <Step title="Dedicated Solver">
+    Total unique problems solved is 500 or above.
+  </Step>
+  <Step title="Casual Problem Solver">
+    Default persona when none of the above thresholds are met.
+  </Step>
+</Steps>
+
+The persona label appears in the page header next to the student's handle and current rank.
+
+## Manual sync button
+
+A **Sync** button in the analytics page header triggers `GET /api/codeforces/sync/:handle`, then reloads all three data sets (performance stats, activity stats, and contest history) in parallel. Use this to see the student's latest Codeforces activity without waiting for the next automated daily sync.

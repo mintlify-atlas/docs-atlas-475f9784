@@ -1,0 +1,96 @@
+---
+title: "Set up Brevo email for SkillSync inactivity alerts"
+description: "Configure Brevo SMTP credentials in SkillSync to send automated inactivity reminder emails to students who haven't solved problems in 7+ days."
+---
+
+SkillSync uses [Nodemailer](https://nodemailer.com) with Brevo (formerly Sendinblue) SMTP to send automated inactivity reminder emails. When the daily sync detects that a student has not solved any Codeforces problems in the past seven days, SkillSync sends them a personalized email encouraging them to return.
+
+## Set up Brevo
+
+<Steps>
+  <Step title="Create a free Brevo account">
+    Go to [brevo.com](https://brevo.com) and sign up for a free account. The free tier allows up to 300 emails per day, which is sufficient for most deployments.
+  </Step>
+  <Step title="Navigate to SMTP settings">
+    In the Brevo dashboard, go to **Settings → SMTP & API**, then select the **SMTP** tab.
+  </Step>
+  <Step title="Note your SMTP credentials">
+    Brevo's SMTP server details are fixed:
+    - Host: `smtp-relay.brevo.com`
+    - Port: `587`
+
+    These values are already hardcoded in `backend/utils/mailer.js` and do not need to be set as environment variables.
+  </Step>
+  <Step title="Copy your login and generate an SMTP key">
+    Your **SMTP login** (the `BREVO_USER` value) is your Brevo account email address. Under the SMTP tab, generate a new **SMTP key** — this becomes your `BREVO_PASS` value.
+  </Step>
+  <Step title="Add credentials to your environment">
+    Add the following variables to `backend/.env` or your Render service's environment variables:
+
+    ```env
+    BREVO_USER=your.brevo.account@example.com
+    BREVO_PASS=your_brevo_smtp_api_key
+    EMAIL_USER=noreply@yourdomain.com
+    ```
+
+    `EMAIL_USER` is the sender address shown in the "From" field of outbound emails. It does not need to match `BREVO_USER`.
+  </Step>
+</Steps>
+
+## Nodemailer transporter configuration
+
+The transporter in `backend/utils/mailer.js` connects to Brevo using STARTTLS on port 587:
+
+```javascript
+const transporter = nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false, // STARTTLS — upgraded from plain to encrypted after handshake
+    auth: {
+        user: process.env.BREVO_USER,
+        pass: process.env.BREVO_PASS,
+    },
+});
+```
+
+## Email template
+
+Inactivity emails are sent with the following properties:
+
+| Field | Value |
+|---|---|
+| Subject | `We Miss You on Codeforces! 💻` |
+| From | `SkillSync Bot <EMAIL_USER>` |
+| To | The student's registered email address |
+
+The HTML body greets the student by name and encourages them to return to solving problems. Nodemailer sends both a plain-text fallback and an HTML version:
+
+```javascript
+{
+  from: `"SkillSync Bot" <${process.env.EMAIL_USER}>`,
+  to: email,
+  subject: 'We Miss You on Codeforces! 💻',
+  text: `Hi ${name},\n\nWe noticed you haven't solved any problems on Codeforces in the past week...`,
+  html: `<div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+    <h2>Hey ${name}! 👋</h2>
+    <p>We noticed you haven't solved any problems on Codeforces in the past week...</p>
+  </div>`
+}
+```
+
+## Verifying the connection
+
+On startup, Nodemailer calls `transporter.verify()` and logs the result to the console. Check your Render logs (or local terminal output) after deploying:
+
+- **Success:** `[EMAIL] Nodemailer ready — Gmail SMTP connected.`
+- **Failure:** `[EMAIL] Nodemailer connection failed: <error message>`
+
+If you see the failure message, double-check that `BREVO_USER` and `BREVO_PASS` are set correctly in your environment.
+
+<Note>
+Brevo's free tier allows 300 emails per day. For a class or cohort of up to a few hundred students, this limit is unlikely to be reached under normal inactivity detection conditions.
+</Note>
+
+<Warning>
+Do not use Gmail SMTP directly in production. Gmail imposes strict sending limits and requires app-specific passwords that can break if account security settings change. Use Brevo or another dedicated transactional email provider instead.
+</Warning>

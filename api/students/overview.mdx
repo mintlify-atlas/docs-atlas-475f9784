@@ -1,0 +1,118 @@
+---
+title: "Students API — SkillSync REST endpoints"
+description: "REST API overview for the SkillSync Students resource. Covers CRUD endpoints, the Student data model, and common request/response patterns."
+---
+
+The Students API is the core resource of SkillSync. It lets you create, read, update, and delete student records, each of which stores profile information alongside live Codeforces data — ratings, rank, contest history, and recent submissions. All student endpoints are mounted under `/api/students` and return JSON.
+
+## Base URL
+
+All student endpoints share the same base path:
+
+```
+https://your-app.onrender.com/api/students
+# or for local development:
+http://localhost:5000/api/students
+```
+
+## Student object
+
+Every response that returns a student record uses the following shape.
+
+<ResponseField name="_id" type="string" required>
+  MongoDB ObjectId uniquely identifying this student record.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The student's full name.
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  The student's email address. Must be unique across all records.
+</ResponseField>
+
+<ResponseField name="phoneNo" type="string" required>
+  The student's phone number.
+</ResponseField>
+
+<ResponseField name="codeforcesHandle" type="string" required>
+  The student's Codeforces username. Used to fetch ratings, contest history, and submissions.
+</ResponseField>
+
+<ResponseField name="currRating" type="number">
+  The student's current Codeforces rating. Defaults to `0` for unrated users.
+</ResponseField>
+
+<ResponseField name="rank" type="string">
+  The student's Codeforces rank label (e.g., `"Newbie"`, `"Pupil"`, `"Expert"`, `"Legendary Grandmaster"`). Defaults to `"Newbie"`.
+</ResponseField>
+
+<ResponseField name="maxRating" type="number">
+  The highest Codeforces rating the student has ever achieved. Defaults to `0`.
+</ResponseField>
+
+<ResponseField name="lastSyncedAt" type="string (ISO 8601 date)">
+  Timestamp of when the student's Codeforces data was last fetched and stored.
+</ResponseField>
+
+<ResponseField name="lastActiveAt" type="string (ISO 8601 date) | null">
+  Timestamp of the student's most recent accepted submission on Codeforces. `null` if no accepted submission has been recorded.
+</ResponseField>
+
+<ResponseField name="emailRemindersSent" type="number">
+  The number of inactivity reminder emails sent during the current inactive streak. Resets when the student submits again.
+</ResponseField>
+
+<ResponseField name="emailRemindersDisabled" type="boolean">
+  When `true`, the automated inactivity reminder system will not send emails to this student.
+</ResponseField>
+
+<ResponseField name="contestData" type="array">
+  Array of contest rating-change objects sourced from the Codeforces API. Each element represents one rated contest the student participated in.
+
+  <Expandable title="contestData item fields">
+    <ResponseField name="contestId" type="number">Codeforces contest ID.</ResponseField>
+    <ResponseField name="contestName" type="string">Human-readable contest name.</ResponseField>
+    <ResponseField name="handle" type="string">The handle used during this contest.</ResponseField>
+    <ResponseField name="rank" type="number">The student's final rank in the contest.</ResponseField>
+    <ResponseField name="ratingUpdateTimeSeconds" type="number">Unix timestamp of when the rating update was applied.</ResponseField>
+    <ResponseField name="oldRating" type="number">Rating before the contest.</ResponseField>
+    <ResponseField name="newRating" type="number">Rating after the contest.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="submissions" type="array">
+  Array of submission objects from the Codeforces API, capped at the most recent 10,000 submissions.
+
+  <Expandable title="submissions item fields">
+    <ResponseField name="id" type="number">Codeforces submission ID.</ResponseField>
+    <ResponseField name="contestId" type="number">Contest the submission belongs to.</ResponseField>
+    <ResponseField name="creationTimeSeconds" type="number">Unix timestamp when the submission was made.</ResponseField>
+    <ResponseField name="problem" type="object">Problem metadata (name, rating, tags).</ResponseField>
+    <ResponseField name="verdict" type="string">Submission verdict, e.g., `"OK"`, `"WRONG_ANSWER"`, `"TIME_LIMIT_EXCEEDED"`.</ResponseField>
+    <ResponseField name="programmingLanguage" type="string">Language used for the submission.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="createdAt" type="string (ISO 8601 date)">
+  Mongoose-managed timestamp set when the document is first created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string (ISO 8601 date)">
+  Mongoose-managed timestamp updated automatically on every save.
+</ResponseField>
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/students` | List all students |
+| `GET` | `/api/students/:id` | Get a single student by ID |
+| `POST` | `/api/students` | Create a new student |
+| `PUT` | `/api/students/:id` | Update a student's fields |
+| `PUT` | `/api/students/:id/toggle-reminder` | Enable or disable email reminders |
+| `DELETE` | `/api/students/:id` | Delete a student |
+
+<Note>
+  Creating or updating a student with a new `codeforcesHandle` triggers an immediate Codeforces data sync. The response will include the freshly fetched ratings, contest history, and submissions rather than the default empty values.
+</Note>

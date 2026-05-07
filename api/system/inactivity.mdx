@@ -1,0 +1,111 @@
+---
+title: "Inactivity API — email reminder logs and controls"
+description: "GET /api/inactivity/logs lists all students with inactivity data. POST endpoints enable or disable automated email reminders per student by MongoDB ID."
+---
+
+The inactivity endpoints give administrators visibility into which students have received automated reminder emails and provide per-student controls to opt a student out of future reminders or re-enroll them. These endpoints are consumed by the admin dashboard but can also be called directly.
+
+## GET /api/inactivity/logs
+
+Returns an array of all student documents projected to the fields relevant to inactivity tracking. Use this to audit reminder history or build a filtered view of at-risk students.
+
+**Example**
+
+```bash
+curl https://your-app.onrender.com/api/inactivity/logs
+```
+
+**Example response**
+
+```json
+[
+  {
+    "_id": "6638a2f1c4e2a1b0d4f9e001",
+    "name": "Aakash Sharma",
+    "email": "aakash@example.com",
+    "emailRemaindersSent": 1,
+    "lastActiveAt": "2026-04-20T14:32:10.000Z"
+  },
+  {
+    "_id": "6638a2f1c4e2a1b0d4f9e002",
+    "name": "Priya Mehta",
+    "email": "priya@example.com",
+    "emailRemaindersSent": 0,
+    "lastActiveAt": null
+  }
+]
+```
+
+<Note>
+  The field `emailRemaindersSent` (note the spelling) is the name returned by this endpoint. This reflects the field projection used in the source query. The underlying schema field is `emailRemindersSent` — the discrepancy is a known typo in the projection query.
+</Note>
+
+**Response fields**
+
+<ResponseField name="name" type="string">
+  The student's display name as stored in MongoDB.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The student's email address. This is the address to which inactivity reminder emails are sent.
+</ResponseField>
+
+<ResponseField name="emailRemaindersSent" type="number">
+  The number of inactivity reminder emails sent during the current inactive streak (field name as returned by this endpoint). Resets to `0` automatically when the nightly sync detects that the student has submitted an accepted solution within the last 7 days.
+</ResponseField>
+
+<ResponseField name="lastActiveAt" type="string | null">
+  ISO 8601 timestamp of the student's most recent accepted Codeforces submission. Returns `null` if no accepted submission has ever been recorded for this student.
+</ResponseField>
+
+---
+
+## POST /api/inactivity/disable/:id
+
+Opts a student out of automated inactivity emails. Once disabled, the nightly sync will skip email delivery for this student regardless of how many days they have been inactive.
+
+<ParamField path="id" type="string" required>
+  The MongoDB ObjectId of the student document to update.
+</ParamField>
+
+**Response**
+
+```json
+{
+  "message": "Email reminders disabled for this student."
+}
+```
+
+**Example**
+
+```bash
+curl -X POST https://your-app.onrender.com/api/inactivity/disable/6638a2f1c4e2a1b0d4f9e001
+```
+
+---
+
+## POST /api/inactivity/enable/:id
+
+Re-enrolls a student in automated inactivity emails and resets their reminder counter so the next sync cycle evaluates them fresh.
+
+<ParamField path="id" type="string" required>
+  The MongoDB ObjectId of the student document to update.
+</ParamField>
+
+**Response**
+
+```json
+{
+  "message": "Email reminders enabled for this student."
+}
+```
+
+**Example**
+
+```bash
+curl -X POST https://your-app.onrender.com/api/inactivity/enable/6638a2f1c4e2a1b0d4f9e001
+```
+
+<Note>
+  Enabling reminders also resets `emailRemindersSent` to `0`. This means that if the student is currently inactive (no accepted submission in the last 7 days), they will receive a reminder email on the very next nightly sync run.
+</Note>

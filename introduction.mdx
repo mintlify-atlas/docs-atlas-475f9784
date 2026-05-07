@@ -1,0 +1,73 @@
+---
+title: "SkillSync: Codeforces progress tracking for educators"
+description: "SkillSync is a MERN stack platform that tracks students' Codeforces activity with automated sync, analytics dashboards, and inactivity alerts."
+---
+
+SkillSync is a full-stack web application built for educators, coaches, and teaching assistants who need to monitor students' competitive programming activity on Codeforces at scale. Instead of manually checking each student's profile, SkillSync centralises all Codeforces data in one place — automatically syncing ratings, contest history, and submission activity every day, and surfacing the insights that matter most.
+
+## The problem SkillSync solves
+
+Running a competitive programming course or club means keeping tabs on dozens (or hundreds) of students across Codeforces. Manually reviewing profiles is time-consuming, inconsistent, and easy to neglect. SkillSync automates the data collection pipeline, flags students who have gone inactive, and gives every student a personal analytics dashboard — so educators can focus on teaching rather than bookkeeping.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Student Management" icon="users" href="/features/student-management">
+    Add, edit, and remove students. Store names, email addresses, phone numbers, and Codeforces handles in one central roster.
+  </Card>
+  <Card title="Codeforces Sync" icon="rotate" href="/features/codeforces-sync">
+    Automatically fetch each student's profile, contest history, and submissions daily via a scheduled cron job. Manual sync is also available from the UI.
+  </Card>
+  <Card title="Analytics Dashboard" icon="chart-line" href="/features/analytics-dashboard">
+    Per-student dashboards with rating-over-time charts, submission heatmaps, and problem difficulty distribution (rating buckets) powered by Recharts.
+  </Card>
+  <Card title="Inactivity Alerts" icon="envelope" href="/features/inactivity-alerts">
+    Automatically detect students who haven't submitted recently and send them personalised reminder emails via Nodemailer and Brevo SMTP.
+  </Card>
+  <Card title="Environment Configuration" icon="gear" href="/configuration/environment-variables">
+    All sensitive credentials — database URIs, Redis tokens, SMTP credentials, and cron secrets — are managed through environment variables with no hard-coded values.
+  </Card>
+  <Card title="REST API" icon="code" href="/api/students/overview">
+    A clean Express REST API exposes student CRUD, Codeforces data endpoints, inactivity checks, and cron trigger routes for external schedulers.
+  </Card>
+</CardGroup>
+
+## Tech stack
+
+**Frontend**
+- React 19 + Vite — fast development server and optimised production builds
+- TailwindCSS — utility-first styling with dark/light mode support
+- Shadcn/UI — accessible component primitives built on Radix UI
+- Recharts — composable chart library for rating and submission visualisations
+
+**Backend**
+- Node.js + Express — lightweight REST API server
+- MongoDB + Mongoose — document database with schema validation
+- cron-job.org — external scheduler that triggers the daily Codeforces sync via HTTP
+- Nodemailer — email delivery for inactivity alerts via Brevo SMTP
+
+## Architecture overview
+
+```
+Browser
+  └── React + Vite frontend
+        ├── Dev: Vite dev server (localhost:5173)
+        └── Prod: Vercel (static hosting + CDN)
+
+Vercel frontend
+  └── HTTP requests → Render backend
+
+Render backend (Node/Express)
+  ├── /api/students       — student CRUD
+  ├── /api/codeforces     — Codeforces data endpoints
+  ├── /api/inactivity     — inactivity detection + email alerts
+  ├── /cron/sync          — triggered daily by cron-job.org
+  ├── /cron/ping          — keep-alive ping (every 14 min)
+  └── /health             — health check endpoint
+
+Render backend
+  ├── MongoDB Atlas       — persistent student and submission data
+  └── Upstash Redis       — response caching for Codeforces API calls
+```
+
+The frontend is a fully static React application deployed on Vercel. It communicates with the backend over HTTP using the `VITE_API_BASE_URL` environment variable. The backend runs on Render's free tier and connects to MongoDB Atlas for persistence and Upstash Redis for caching Codeforces API responses. An external scheduler on cron-job.org triggers the daily sync and sends a keep-alive ping every 14 minutes to prevent Render cold starts.

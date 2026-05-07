@@ -1,0 +1,79 @@
+---
+title: "DELETE /api/students/:id — remove a student"
+description: "DELETE /api/students/:id permanently removes a student and all their cached Codeforces data from SkillSync. This action cannot be undone."
+---
+
+The delete endpoint removes a student document — including all embedded `contestData` and `submissions` arrays — from MongoDB in a single operation. The deleted document is returned in the response body so callers can confirm exactly what was removed or archive it on their end before it is gone.
+
+## Request
+
+```bash
+DELETE /api/students/:id
+```
+
+### Path parameter
+
+<ParamField path="id" type="string" required>
+  The MongoDB ObjectId of the student to delete.
+</ParamField>
+
+<Warning>
+  Deletion is permanent. The student's profile, stored `contestData`, and all cached `submissions` are removed from MongoDB immediately. Any Redis cache keys associated with the student's Codeforces handle are **not** explicitly cleared on delete — they will expire naturally according to their configured TTL. This action cannot be undone.
+</Warning>
+
+### Example
+
+```bash
+curl -X DELETE https://your-app.onrender.com/api/students/664a1f2e8c3b2a001f4e7d91
+```
+
+## Response
+
+Returns `200 OK` with the deleted student object.
+
+```json
+{
+  "_id": "664a1f2e8c3b2a001f4e7d91",
+  "name": "Alice Sharma",
+  "email": "alice@example.com",
+  "phoneNo": "+91-9876543210",
+  "codeforcesHandle": "tourist",
+  "currRating": 3779,
+  "rank": "Legendary Grandmaster",
+  "maxRating": 3979,
+  "lastSyncedAt": "2026-05-07T08:00:00.000Z",
+  "lastActiveAt": "2026-05-06T14:32:11.000Z",
+  "emailRemindersSent": 0,
+  "emailRemindersDisabled": false,
+  "contestData": [
+    {
+      "contestId": 1991,
+      "contestName": "Codeforces Round 957 (Div. 1)",
+      "handle": "tourist",
+      "rank": 1,
+      "ratingUpdateTimeSeconds": 1716825600,
+      "oldRating": 3756,
+      "newRating": 3779
+    }
+  ],
+  "submissions": [
+    {
+      "id": 262144001,
+      "contestId": 1991,
+      "creationTimeSeconds": 1716823412,
+      "problem": { "name": "Subsequence Update", "rating": 2800, "tags": ["dp"] },
+      "verdict": "OK",
+      "programmingLanguage": "GNU C++20 (64)"
+    }
+  ],
+  "createdAt": "2026-04-01T10:00:00.000Z",
+  "updatedAt": "2026-05-07T08:00:01.000Z"
+}
+```
+
+## Errors
+
+| Status | Body | Cause |
+|--------|------|-------|
+| `404 Not Found` | `{ "error": "No such student found" }` | No student exists with the given `id`. |
+| `500 Internal Server Error` | `{ "error": "..." }` | Database operation failed. |

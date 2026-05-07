@@ -1,0 +1,88 @@
+---
+title: "GET /api/codeforces/sync/:handle — manual sync"
+description: "GET /api/codeforces/sync/:handle triggers an immediate Codeforces data refresh for a student, invalidating cache and fetching fresh profile data."
+---
+
+The sync endpoint triggers an immediate Codeforces data refresh for a single student identified by their Codeforces handle. Unlike the scheduled background sync, this endpoint bypasses the cache entirely to guarantee the student's profile, contest history, and submission data are up to date at the moment of the request.
+
+## Request
+
+```
+GET /api/codeforces/sync/:handle
+```
+
+## Path parameters
+
+<ParamField path="handle" type="string" required>
+  The student's Codeforces username. Must match the `codeforcesHandle` field stored on the student record in MongoDB.
+</ParamField>
+
+## How it works
+
+When the endpoint is called, the following steps execute in order:
+
+1. **Cache invalidation** — All three Redis keys for the given handle are deleted in parallel before any data is fetched:
+   - `cf:info:<handle>` — cached user info (rating, rank, maxRating)
+   - `cf:contest:<handle>` — cached contest history
+   - `cf:submissions:<handle>` — cached submission list
+
+2. **Parallel data fetch** — After invalidation, three Codeforces API calls are made concurrently:
+   - `user.info` — retrieves current rating, rank, and max rating
+   - `user.rating` — retrieves the full contest rating history
+   - `user.status` — retrieves up to 10,000 most recent submissions
+
+3. **lastActiveAt computation** — The most recent submission with a verdict of `OK` is identified and its timestamp is used to set `lastActiveAt` on the student record.
+
+4. **MongoDB update** — The student document is updated with `currRating`, `rank`, `maxRating`, `contestData`, `submissions`, `lastActiveAt`, and `lastSyncedAt` (set to the current server time). The query matches on `codeforcesHandle`.
+
+## Example request
+
+```bash
+curl https://your-api-host/api/codeforces/sync/tourist
+```
+
+## Response
+
+### 200 OK
+
+Returns the updated student document as stored in MongoDB after the sync.
+
+```json
+{
+  "message": "Codeforces data synced successfully",
+  "student": {
+    "_id": "64a1f2c3e4b0a1234567890a",
+    "name": "Gennady Korotkevich",
+    "email": "tourist@example.com",
+    "codeforcesHandle": "tourist",
+    "currRating": 3979,
+    "rank": "Legendary Grandmaster",
+    "maxRating": 3979,
+    "lastSyncedAt": "2026-05-07T10:30:00.000Z",
+    "lastActiveAt": "2026-05-06T18:45:22.000Z"
+  }
+}
+```
+
+## Error responses
+
+| Status | Cause                                                             |
+| ------ | ----------------------------------------------------------------- |
+| `404`  | No student with the given Codeforces handle exists in the database |
+| `500`  | Sync failed — Codeforces API unreachable, network timeout, or unexpected server error |
+
+```json
+{
+  "error": "No student found with the given Codeforces handle"
+}
+```
+
+```json
+{
+  "error": "Failed to sync Codeforces data"
+}
+```
+
+<Note>
+  This endpoint is invoked by the per-row sync button in the student list table and by the Sync button on the individual student detail page. It is intended for on-demand refreshes; routine data updates are handled by the background sync scheduler.
+</Note>

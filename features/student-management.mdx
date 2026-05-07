@@ -1,0 +1,100 @@
+---
+title: "Manage students in the SkillSync dashboard"
+description: "Add, edit, search, sort, and delete students from the SkillSync dashboard. Each student is linked to a Codeforces handle for automated tracking."
+---
+
+The SkillSync dashboard displays all enrolled students in a sortable, searchable table. Each row represents one student and shows their live Codeforces rating, rank, highest-ever rating, the last time their data was synced, and controls for editing, deleting, and toggling email reminders. All data is kept up to date through automated daily syncs and on-demand sync buttons.
+
+## Student data model
+
+Every student record in MongoDB stores the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | String | Student's full name (required) |
+| `email` | String | Unique email address (required) |
+| `phoneNo` | String | Phone number (required) |
+| `codeforcesHandle` | String | Codeforces username used to fetch all CF data (required) |
+| `currRating` | Number | Current Codeforces rating, updated on every sync |
+| `rank` | String | Current rank label from Codeforces (e.g. "Expert") |
+| `maxRating` | Number | Highest rating the student has ever reached |
+| `lastSyncedAt` | Date | Timestamp of the most recent successful sync |
+| `lastActiveAt` | Date | Date of the student's last accepted submission |
+| `emailRemindersSent` | Number | Count of inactivity emails sent in the current inactive streak |
+| `emailRemindersDisabled` | Boolean | When `true`, inactivity emails are suppressed for this student |
+| `contestData` | Array | Full contest rating history fetched from Codeforces |
+| `submissions` | Array | Up to 10,000 most recent submissions fetched from Codeforces |
+
+## Adding a student
+
+<Steps>
+  <Step title="Open the Add Student dialog">
+    Click the **Add Student** button in the top-right corner of the dashboard toolbar.
+  </Step>
+  <Step title="Fill in the form">
+    Enter the student's name, email address, phone number, and their Codeforces handle. All four fields are required.
+  </Step>
+  <Step title="Save">
+    Click **Save**. SkillSync immediately syncs the student's Codeforces data — rating, rank, max rating, full contest history, and up to 10,000 recent submissions — before returning the new record to the dashboard.
+  </Step>
+</Steps>
+
+## Editing a student
+
+Click the **Edit** button in any student's row to reopen the Add Student dialog pre-filled with that student's current data. Update any field and save. If the Codeforces handle is changed, SkillSync automatically triggers a full re-sync against the new handle so the stored data stays consistent.
+
+## Deleting a student
+
+Click the trash icon in the student's row. A confirmation prompt appears before the record is permanently removed from the database. The action calls `DELETE /api/students/:id`.
+
+## Dashboard summary cards
+
+Three summary cards appear above the table and update from the latest synced data:
+
+<CardGroup cols={3}>
+  <Card title="Total Students" icon="users">
+    The total count of students currently enrolled in SkillSync.
+  </Card>
+  <Card title="Avg Rating" icon="trending-up">
+    The mean of all students' current Codeforces ratings. Students with rating 0 (unrated) are included in the average.
+  </Card>
+  <Card title="Top Rating" icon="medal">
+    The highest current rating across all enrolled students.
+  </Card>
+</CardGroup>
+
+## Searching
+
+The search box in the toolbar filters the table in real time. Matches are checked against the student's **name**, **Codeforces handle**, and **email** (case-insensitive). The result count shown next to the search box reflects filtered vs. total students.
+
+## Sorting
+
+Click any column header to sort by that field. Click again to toggle between ascending and descending order. Sortable columns are:
+
+- **Student** (name)
+- **CF Handle** (codeforcesHandle)
+- **Current Rating** (currRating) — default sort, descending
+- **Max Rating** (maxRating)
+- **Last Synced** (lastSyncedAt)
+
+## Codeforces rank color coding
+
+Rating values and handle links are colored by rank to make skill levels scannable at a glance:
+
+| Rating range | Rank | Color |
+|---|---|---|
+| Unrated / 0 | Unrated | Gray |
+| < 1200 | Newbie | Gray |
+| 1200 – 1399 | Pupil | Green |
+| 1400 – 1599 | Specialist | Cyan |
+| 1600 – 1899 | Expert | Blue |
+| 1900 – 2099 | Candidate Master | Purple |
+| 2100 – 2299 | Master | Orange |
+| 2300 – 2399 | International Master | Orange |
+| 2400 – 2599 | Grandmaster | Red |
+| 2600 – 2999 | International Grandmaster | Red |
+| ≥ 3000 | Legendary Grandmaster | Red |
+
+## Email reminder toggle
+
+Each student row includes a toggle switch in the **Reminders** column. When the switch is on (checked), inactivity emails are enabled for that student. Turning it off sets `emailRemindersDisabled: true` in the database, which prevents any future inactivity emails from being sent to that student. The toggle calls `PUT /api/students/:id/toggle-reminder` and updates the UI optimistically without a page reload.

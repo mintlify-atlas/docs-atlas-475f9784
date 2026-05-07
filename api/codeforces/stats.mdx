@@ -1,0 +1,221 @@
+---
+title: "GET /api/codeforces/stats/:handle — submission stats"
+description: "GET /api/codeforces/stats/:handle returns computed analytics for a student: solved counts, heatmap, tag stats, consistency score, and more."
+---
+
+The stats endpoint computes and returns a comprehensive analytics snapshot for a student based on their Codeforces submission history. All metrics are derived from submissions cached in Redis and stored in MongoDB — no live Codeforces API call is made unless the submission cache has expired. Results can be scoped to a rolling time window using the `days` query parameter.
+
+## Request
+
+```
+GET /api/codeforces/stats/:handle?days=<value>
+```
+
+## Path parameters
+
+<ParamField path="handle" type="string" required>
+  The student's Codeforces username.
+</ParamField>
+
+## Query parameters
+
+<ParamField query="days" type="string" default="30">
+  The time window over which to compute statistics. Accepted values: `"7"`, `"30"`, `"90"`, `"365"`, or `"all"`. When set to `"all"`, all submissions on record are included regardless of date.
+</ParamField>
+
+## Response fields
+
+<ResponseField name="totalSolved" type="number">
+  Count of unique accepted problems within the time window. Deduplication is based on `contestId + problemIndex`.
+</ResponseField>
+
+<ResponseField name="hardestProblem" type="object">
+  The highest-rated accepted problem in the window.
+  <Expandable title="properties">
+    <ResponseField name="name" type="string">
+      Problem title as returned by the Codeforces API.
+    </ResponseField>
+    <ResponseField name="rating" type="number">
+      Codeforces difficulty rating of the problem.
+    </ResponseField>
+    <ResponseField name="tags" type="string[]">
+      List of topic tags assigned to the problem (e.g., `["dp", "graphs"]`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="ratingBuckets" type="object">
+  A map of rating bucket to the number of accepted problems in that bucket. Buckets are rounded down to the nearest 100 (e.g., `"800"`, `"1000"`, `"1200"`). Problems without a rating are placed in bucket `"0"`.
+</ResponseField>
+
+<ResponseField name="averagePerDay" type="string">
+  Total unique solved problems divided by the number of days in the window, formatted to two decimal places (e.g., `"2.50"`).
+</ResponseField>
+
+<ResponseField name="totalSubmissions" type="number">
+  Total number of submissions (all verdicts) within the time window.
+</ResponseField>
+
+<ResponseField name="submissionHeatmap" type="object">
+  A map of date strings (`YYYY-MM-DD`) to daily submission counts.
+  <Expandable title="properties">
+    <ResponseField name="total" type="number">
+      All submissions on that date.
+    </ResponseField>
+    <ResponseField name="correct" type="number">
+      Submissions with verdict `OK` on that date.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="solvedProblems" type="object[]">
+  Deduplicated array of accepted problems in the window.
+  <Expandable title="properties">
+    <ResponseField name="name" type="string">
+      Problem title.
+    </ResponseField>
+    <ResponseField name="rating" type="number">
+      Difficulty rating. `0` if unrated.
+    </ResponseField>
+    <ResponseField name="tags" type="string[]">
+      Topic tags for the problem.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="tagStats" type="object[]">
+  Per-tag analytics derived from deduplicated solved problems, sorted by `solved` descending.
+  <Expandable title="properties">
+    <ResponseField name="tag" type="string">
+      Topic tag name.
+    </ResponseField>
+    <ResponseField name="solved" type="number">
+      Number of unique accepted problems with this tag.
+    </ResponseField>
+    <ResponseField name="avgRating" type="number">
+      Average difficulty rating of accepted problems with this tag.
+    </ResponseField>
+    <ResponseField name="maxRating" type="number">
+      Highest difficulty rating among accepted problems with this tag.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="consistencyScore" type="number">
+  A 0–100 score reflecting submission regularity. Computed as `min(100, round(activeDays * 0.45 + avgPerDay * 12 + longestStreak * 2))`, where `activeDays` is days with at least one submission, `avgPerDay` is submissions per active day, and `longestStreak` is the longest consecutive-day streak.
+</ResponseField>
+
+<ResponseField name="persona" type="string">
+  A label summarising the student's problem-solving profile. One of:
+  - `"Legendary Problem Hunter"` — hardest accepted problem rated ≥ 3000
+  - `"High Difficulty Explorer"` — hardest accepted problem rated ≥ 2200
+  - `"Consistency Grinder"` — consistency score ≥ 75
+  - `"Dedicated Solver"` — total solved ≥ 500
+  - `"Casual Problem Solver"` — all other cases
+</ResponseField>
+
+<ResponseField name="skillProgression" type="object[]">
+  Monthly breakdown of problem-solving difficulty, sorted chronologically.
+  <Expandable title="properties">
+    <ResponseField name="month" type="string">
+      Year and month in `YYYY-MM` format.
+    </ResponseField>
+    <ResponseField name="avgRating" type="number">
+      Average difficulty rating of accepted problems solved that month.
+    </ResponseField>
+    <ResponseField name="solved" type="number">
+      Number of accepted problems solved that month.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="weakTopics" type="object[]">
+  Up to 5 topics where the student has the lowest acceptance rates, limited to tags with at least 5 attempts, sorted by acceptance ascending.
+  <Expandable title="properties">
+    <ResponseField name="tag" type="string">
+      Topic tag name.
+    </ResponseField>
+    <ResponseField name="acceptance" type="number">
+      Acceptance rate as a percentage (0–100).
+    </ResponseField>
+    <ResponseField name="attempts" type="number">
+      Total number of submissions for problems with this tag.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="learningVelocity" type="number">
+  Change in average accepted problem rating from the first month to the most recent month in `skillProgression`. Positive values indicate increasing problem difficulty over time. Returns `0` if fewer than two months of data are available.
+</ResponseField>
+
+<ResponseField name="burnoutRisk" type="boolean">
+  `true` if total submissions in the most recent 7 days are less than 50% of submissions in the 7 days before that, and at least 14 days of heatmap data exist. `false` otherwise.
+</ResponseField>
+
+<ResponseField name="predictedRating" type="number">
+  An estimated Codeforces rating computed as `round(hardestRating + consistencyScore * 0.8 + learningVelocity * 0.25)`, where `hardestRating` is the rating of the hardest accepted problem.
+</ResponseField>
+
+## Example request
+
+```bash
+curl "https://your-api-host/api/codeforces/stats/tourist?days=30"
+```
+
+## Example response
+
+```json
+{
+  "totalSolved": 42,
+  "hardestProblem": {
+    "name": "Array Stabilization (GCD version)",
+    "rating": 2600,
+    "tags": ["math", "number theory"]
+  },
+  "ratingBuckets": {
+    "0": 2,
+    "1600": 8,
+    "1800": 14,
+    "2000": 10,
+    "2200": 5,
+    "2600": 3
+  },
+  "averagePerDay": "1.40",
+  "totalSubmissions": 87,
+  "submissionHeatmap": {
+    "2026-04-10": { "total": 5, "correct": 3 },
+    "2026-04-11": { "total": 2, "correct": 2 }
+  },
+  "solvedProblems": [
+    { "name": "Good Subarrays", "rating": 1600, "tags": ["dp"] }
+  ],
+  "tagStats": [
+    { "tag": "dp", "solved": 12, "avgRating": 1850, "maxRating": 2400 },
+    { "tag": "graphs", "solved": 8, "avgRating": 1900, "maxRating": 2200 }
+  ],
+  "consistencyScore": 68,
+  "persona": "Dedicated Solver",
+  "skillProgression": [
+    { "month": "2026-03", "avgRating": 1720, "solved": 18 },
+    { "month": "2026-04", "avgRating": 1890, "solved": 24 }
+  ],
+  "weakTopics": [
+    { "tag": "geometry", "acceptance": 20, "attempts": 10 }
+  ],
+  "learningVelocity": 170,
+  "burnoutRisk": false,
+  "predictedRating": 2697
+}
+```
+
+## Error responses
+
+| Status | Cause |
+| ------ | ----- |
+| `500`  | Stats computation failed — submission data unavailable or unexpected server error |
+
+```json
+{
+  "error": "Failed to compute user stats"
+}
+```

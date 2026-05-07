@@ -1,0 +1,104 @@
+---
+title: "Automated inactivity email alerts for students"
+description: "SkillSync sends automated reminder emails to students who haven't solved a Codeforces problem in 7+ days. Learn how alerts work and how to control them."
+---
+
+SkillSync monitors each student's Codeforces activity and automatically sends a reminder email when a student has not solved any problem in seven or more days. The system is designed to send exactly one email per continuous inactive streak, avoiding repeated notifications while still giving inactive students a timely nudge to return to practice.
+
+## How inactivity is detected
+
+During every sync run, SkillSync derives `lastActiveAt` from the student's submission history by finding the most recent submission where `verdict === "OK"` and converting its Unix timestamp to a date. Inactivity is then measured as:
+
+```javascript
+const inactiveDays =
+  (Date.now() - lastActiveAt.getTime()) / (1000 * 60 * 60 * 24);
+```
+
+If the student has no accepted submissions at all, `lastActiveAt` is `null` and `inactiveDays` is treated as `Infinity`, which immediately satisfies the inactivity threshold.
+
+## Email trigger conditions
+
+An inactivity email is sent only when all three of the following conditions are true at the time of the sync:
+
+| Condition | Field checked | Threshold |
+|---|---|---|
+| Student is inactive | `lastActiveAt` | `inactiveDays >= 7` |
+| No email sent yet this streak | `emailRemindersSent` | `=== 0` |
+| Reminders not disabled | `emailRemindersDisabled` | `=== false` |
+
+If all three conditions are met, `sendInactivityEmail()` is called and `emailRemindersSent` is incremented to `1`. Because subsequent sync runs will find `emailRemindersSent === 1`, no further emails are sent during the same inactive streak.
+
+<Warning>
+  SkillSync sends at most one email per inactivity streak. Once `emailRemindersSent` is greater than 0, no additional reminder is sent until the student solves a problem and the counter resets.
+</Warning>
+
+## Email reset on activity
+
+When a sync run detects that `inactiveDays < 7` for a student whose `emailRemindersSent` is greater than 0, the counter is reset to 0:
+
+```javascript
+if (inactiveDays < 7 && student.emailRemindersSent > 0) {
+  await Student.findByIdAndUpdate(student._id, { emailRemindersSent: 0 });
+}
+```
+
+This ensures that if the student goes inactive again in the future, a new reminder email will be sent for that streak.
+
+## Email content
+
+Inactivity emails are sent from the **SkillSync Bot** sender address with the following structure:
+
+| Property | Value |
+|---|---|
+| **Subject** | `We Miss You on Codeforces!` |
+| **From** | `"SkillSync Bot" <EMAIL_USER>` |
+| **To** | The student's email address stored in MongoDB |
+
+The email body encourages the student to return to problem solving:
+
+> Hey \{name\}! We noticed you haven't solved any problems on Codeforces in the past week. Even one problem a day keeps the rust away! Jump back in and keep that rating climbing.
+
+Both plain-text and HTML versions of the body are sent so the message renders correctly in all mail clients.
+
+<Note>
+  SkillSync uses Brevo SMTP (`smtp-relay.brevo.com`, port 587) to deliver emails. You must set the `BREVO_USER` and `BREVO_PASS` environment variables in your deployment for email delivery to work. The transporter verifies the connection on server startup and logs an error if the credentials are invalid.
+</Note>
+
+## Disabling reminders per student
+
+You can disable inactivity emails for an individual student without deleting their record:
+
+- **Dashboard toggle:** the **Reminders** column in the student table contains a toggle switch. Turning it off calls `PUT /api/students/:id/toggle-reminder` and sets `emailRemindersDisabled: true` in MongoDB. The switch state updates instantly in the UI.
+- **API:** send a `PUT` request directly:
+
+```bash
+PUT /api/students/:id/toggle-reminder
+Content-Type: application/json
+
+{ "emailRemindersDisabled": true }
+```
+
+Set `emailRemindersDisabled` to `false` to re-enable reminders for the student.
+
+## Inactivity log
+
+To audit which students have received inactivity emails, call:
+
+```
+GET /api/inactivity/logs
+```
+
+The response is an array of objects with the following fields for every student:
+
+```json
+[
+  {
+    "name": "Alice",
+    "email": "alice@example.com",
+    "emailRemindersSent": 1,
+    "lastActiveAt": "2026-04-28T00:00:00.000Z"
+  }
+]
+```
+
+`emailRemindersSent` reflects how many emails were sent during the current inactive streak (0 or 1). `lastActiveAt` is `null` if the student has never submitted an accepted solution.

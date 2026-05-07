@@ -1,0 +1,98 @@
+---
+title: "POST /api/students — create a new student"
+description: "POST /api/students creates a student record and immediately syncs their Codeforces profile, contest history, and submission data from the API."
+---
+
+Creating a student in SkillSync does more than persist a database record. The moment the document is saved, the server calls the Codeforces API using the supplied handle to fetch the student's current rating, rank, max rating, full contest history, and up to 10,000 recent submissions. The fully synced object is what gets returned in the response — not the bare record with default zeros.
+
+## Request
+
+```bash
+POST /api/students
+Content-Type: application/json
+```
+
+### Body parameters
+
+<ParamField body="name" type="string" required>
+  The student's full name.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  The student's email address. Must be unique across all student records — a duplicate will result in a `400` error.
+</ParamField>
+
+<ParamField body="phoneNo" type="string" required>
+  The student's phone number.
+</ParamField>
+
+<ParamField body="codeforcesHandle" type="string" required>
+  The student's Codeforces username. Must correspond to a real account on codeforces.com so that the sync can populate rating and contest data.
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST https://your-app.onrender.com/api/students \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alice Sharma",
+    "email": "alice@example.com",
+    "phoneNo": "+91-9876543210",
+    "codeforcesHandle": "tourist"
+  }'
+```
+
+## Response
+
+Returns `201 Created` with the synced student object. Note that `currRating`, `rank`, `maxRating`, `contestData`, and `submissions` are populated from Codeforces — not the schema defaults.
+
+```json
+{
+  "_id": "664a1f2e8c3b2a001f4e7d91",
+  "name": "Alice Sharma",
+  "email": "alice@example.com",
+  "phoneNo": "+91-9876543210",
+  "codeforcesHandle": "tourist",
+  "currRating": 3779,
+  "rank": "Legendary Grandmaster",
+  "maxRating": 3979,
+  "lastSyncedAt": "2026-05-07T08:00:00.000Z",
+  "lastActiveAt": "2026-05-06T14:32:11.000Z",
+  "emailRemindersSent": 0,
+  "emailRemindersDisabled": false,
+  "contestData": [
+    {
+      "contestId": 1991,
+      "contestName": "Codeforces Round 957 (Div. 1)",
+      "handle": "tourist",
+      "rank": 1,
+      "ratingUpdateTimeSeconds": 1716825600,
+      "oldRating": 3756,
+      "newRating": 3779
+    }
+  ],
+  "submissions": [
+    {
+      "id": 262144001,
+      "contestId": 1991,
+      "creationTimeSeconds": 1716823412,
+      "problem": { "name": "Subsequence Update", "rating": 2800, "tags": ["dp"] },
+      "verdict": "OK",
+      "programmingLanguage": "GNU C++20 (64)"
+    }
+  ],
+  "createdAt": "2026-05-07T08:00:00.000Z",
+  "updatedAt": "2026-05-07T08:00:01.000Z"
+}
+```
+
+## Errors
+
+| Status | Body | Cause |
+|--------|------|-------|
+| `400 Bad Request` | `{ "error": "..." }` | Validation failed (e.g., missing required field, duplicate email, Mongoose schema error). |
+
+<Note>
+  The Codeforces handle must exist on codeforces.com. If the handle is invalid or the Codeforces API is temporarily unavailable, the student document is still created and saved — but `currRating`, `maxRating`, `rank`, `contestData`, and `submissions` may remain at their default empty values until the next scheduled sync.
+</Note>

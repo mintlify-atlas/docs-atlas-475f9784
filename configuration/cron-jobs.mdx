@@ -1,0 +1,69 @@
+---
+title: "Configure scheduled sync jobs for SkillSync"
+description: "Set up cron-job.org to trigger SkillSync's daily Codeforces sync and keep-alive ping, preventing cold starts on Render's free tier."
+---
+
+SkillSync relies on [cron-job.org](https://cron-job.org) as an external scheduler rather than running `node-cron` inside the process. This means the backend can fully sleep between jobs on Render's free tier, and the scheduler fires reliably even when the server is idle. You configure two jobs: one to sync Codeforces data daily, and one to keep the server warm every 14 minutes.
+
+## Sync job — `POST /cron/sync`
+
+This job fetches fresh Codeforces data for every student in the database, updates ratings, contest history, and submission records, and sends inactivity reminder emails to students who have not solved a problem in the past seven days.
+
+| Setting | Value |
+|---|---|
+| URL | `https://your-app.onrender.com/cron/sync` |
+| Method | `POST` |
+| Header | `x-cron-secret: <your CRON_SECRET value>` |
+| Schedule | Every day at 02:00 UTC (recommended) |
+
+**Expected response:**
+
+```json
+{ "message": "Sync started", "time": "<timestamp>" }
+```
+
+<Note>
+The endpoint responds immediately with `{ "message": "Sync started" }` before the sync completes. This is intentional — syncing all students can take several minutes, and responding early prevents cron-job.org from treating the request as timed out.
+</Note>
+
+## Keep-alive ping — `GET /cron/ping`
+
+This job prevents Render's free tier from spinning down the container between sync runs. Without it, the first request after a period of inactivity triggers a cold start that can take 10 or more seconds.
+
+| Setting | Value |
+|---|---|
+| URL | `https://your-app.onrender.com/cron/ping` |
+| Method | `GET` |
+| Schedule | Every 14 minutes |
+
+**Expected response:**
+
+```json
+{ "status": "alive", "time": "<timestamp>" }
+```
+
+<Warning>
+Without the keep-alive ping, users will experience cold start delays whenever Render spins up the container after a period of inactivity. Configure this job alongside the sync job when you deploy.
+</Warning>
+
+## Security
+
+The `/cron/sync` endpoint is protected by the `CRON_SECRET` environment variable. Any request that omits the `x-cron-secret` header or provides the wrong value receives a `401 Unauthorized` response.
+
+Choose any long, random string for `CRON_SECRET` — for example, a UUID or the output of `openssl rand -hex 32`. Set the same value in two places:
+
+1. Your Render service's environment variables (`CRON_SECRET=...`)
+2. The cron-job.org job's request header (`x-cron-secret: ...`)
+
+## Health check endpoint
+
+`GET /health` returns `{ "status": "ok", "time": "<timestamp>" }`. Use this URL with external uptime monitors such as UptimeRobot to track whether the backend is reachable independently of the cron jobs.
+
+## Manually triggering a sync
+
+You can fire a sync outside the schedule using `curl`. Replace the placeholder values with your actual Render URL and secret:
+
+```bash
+curl -X POST https://your-app.onrender.com/cron/sync \
+  -H "x-cron-secret: your_cron_secret_here"
+```

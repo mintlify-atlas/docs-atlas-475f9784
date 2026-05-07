@@ -1,0 +1,144 @@
+---
+title: "PUT /api/students/:id — update a student record"
+description: "PUT /api/students/:id updates a student's fields. Changing the codeforcesHandle triggers an automatic re-sync of all Codeforces data."
+---
+
+This page documents two related update endpoints. The first lets you modify any student field; the second is a focused shortcut for toggling the email reminder setting without affecting other fields.
+
+---
+
+## PUT /api/students/:id
+
+Updates one or more fields on an existing student record. All body fields are optional — only the fields you send are changed. If `codeforcesHandle` is included, the server immediately re-syncs all Codeforces data (ratings, contest history, submissions) for the new handle and returns the refreshed document.
+
+### Path parameter
+
+<ParamField path="id" type="string" required>
+  The MongoDB ObjectId of the student to update.
+</ParamField>
+
+### Body parameters
+
+<ParamField body="name" type="string">
+  Updated full name.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Updated email address. Must remain unique across all records.
+</ParamField>
+
+<ParamField body="phoneNo" type="string">
+  Updated phone number.
+</ParamField>
+
+<ParamField body="codeforcesHandle" type="string">
+  Updated Codeforces username. Providing this field triggers a full re-sync for the new handle after the database update is applied.
+</ParamField>
+
+<ParamField body="emailRemindersDisabled" type="boolean">
+  Set to `true` to disable inactivity emails, or `false` to re-enable them.
+</ParamField>
+
+<Note>
+  If `codeforcesHandle` is present in the request body, the endpoint performs a full Codeforces data sync for the new handle after saving the update. The response will contain the re-synced ratings, `contestData`, and `submissions` rather than the previous cached values.
+</Note>
+
+### Example
+
+```bash
+curl -X PUT https://your-app.onrender.com/api/students/664a1f2e8c3b2a001f4e7d91 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alice S. Sharma",
+    "codeforcesHandle": "tourist"
+  }'
+```
+
+### Response
+
+Returns `200 OK` with the updated (and optionally re-synced) student object.
+
+```json
+{
+  "_id": "664a1f2e8c3b2a001f4e7d91",
+  "name": "Alice S. Sharma",
+  "email": "alice@example.com",
+  "phoneNo": "+91-9876543210",
+  "codeforcesHandle": "tourist",
+  "currRating": 3779,
+  "rank": "Legendary Grandmaster",
+  "maxRating": 3979,
+  "lastSyncedAt": "2026-05-07T09:15:00.000Z",
+  "lastActiveAt": "2026-05-06T14:32:11.000Z",
+  "emailRemindersSent": 0,
+  "emailRemindersDisabled": false,
+  "contestData": [ ],
+  "submissions": [ ],
+  "createdAt": "2026-04-01T10:00:00.000Z",
+  "updatedAt": "2026-05-07T09:15:01.000Z"
+}
+```
+
+### Errors
+
+| Status | Body | Cause |
+|--------|------|-------|
+| `404 Not Found` | `{ "error": "No such student found" }` | No student exists with the given `id`. |
+| `500 Internal Server Error` | `{ "error": "..." }` | Database error or sync failure. |
+
+---
+
+## PUT /api/students/:id/toggle-reminder
+
+A focused endpoint for enabling or disabling inactivity email reminders for a single student. Only the `emailRemindersDisabled` field is updated; all other fields are left unchanged.
+
+### Path parameter
+
+<ParamField path="id" type="string" required>
+  The MongoDB ObjectId of the student whose reminder setting you want to change.
+</ParamField>
+
+### Body parameter
+
+<ParamField body="emailRemindersDisabled" type="boolean" required>
+  Pass `true` to stop sending inactivity reminder emails to this student, or `false` to resume them.
+</ParamField>
+
+### Example
+
+```bash
+curl -X PUT https://your-app.onrender.com/api/students/664a1f2e8c3b2a001f4e7d91/toggle-reminder \
+  -H "Content-Type: application/json" \
+  -d '{ "emailRemindersDisabled": true }'
+```
+
+### Response
+
+Returns `200 OK` with the updated student object reflecting the new `emailRemindersDisabled` value.
+
+```json
+{
+  "_id": "664a1f2e8c3b2a001f4e7d91",
+  "name": "Alice S. Sharma",
+  "email": "alice@example.com",
+  "phoneNo": "+91-9876543210",
+  "codeforcesHandle": "tourist",
+  "currRating": 3779,
+  "rank": "Legendary Grandmaster",
+  "maxRating": 3979,
+  "lastSyncedAt": "2026-05-07T09:15:00.000Z",
+  "lastActiveAt": "2026-05-06T14:32:11.000Z",
+  "emailRemindersSent": 0,
+  "emailRemindersDisabled": true,
+  "contestData": [],
+  "submissions": [],
+  "createdAt": "2026-04-01T10:00:00.000Z",
+  "updatedAt": "2026-05-07T09:20:00.000Z"
+}
+```
+
+### Errors
+
+| Status | Body | Cause |
+|--------|------|-------|
+| `500 Internal Server Error` | `{ "error": "Failed to toggle reminder" }` | Database update failed. |

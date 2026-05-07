@@ -1,0 +1,142 @@
+---
+title: "GET /api/codeforces/contest/:handle — contest history"
+description: "GET /api/codeforces/contest/:handle returns a student's full contest history with ratings, rank, and solved/total problem counts per contest."
+---
+
+The contest history endpoint returns a student's rated contest participation, enriched with per-contest solved and total problem counts. Responses are served from a Redis cache when available, making repeated lookups fast. Use the `days` query parameter to narrow results to a recent window.
+
+## Request
+
+```
+GET /api/codeforces/contest/:handle?days=<value>
+```
+
+## Path parameters
+
+<ParamField path="handle" type="string" required>
+  The student's Codeforces username.
+</ParamField>
+
+## Query parameters
+
+<ParamField query="days" type="string" default="all">
+  Limits results to contests that took place within the given number of days. Pass a numeric string such as `"90"` to filter, or omit the parameter (or pass `"all"`) to return the complete history.
+</ParamField>
+
+## Response fields
+
+<ResponseField name="contestStats" type="object[]">
+  Array of contest objects, one per rated contest the student participated in within the requested window.
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="contestId" type="number">
+      Codeforces internal contest ID.
+    </ResponseField>
+    <ResponseField name="contestName" type="string">
+      Full display name of the contest (e.g., `"Codeforces Round 950 (Div. 2)"`).
+    </ResponseField>
+    <ResponseField name="date" type="string">
+      Date the contest ended and ratings were updated, in `YYYY-MM-DD` format.
+    </ResponseField>
+    <ResponseField name="rank" type="number">
+      The student's final rank among all participants in the contest.
+    </ResponseField>
+    <ResponseField name="oldRating" type="number">
+      The student's Codeforces rating immediately before the contest.
+    </ResponseField>
+    <ResponseField name="newRating" type="number">
+      The student's Codeforces rating immediately after the contest.
+    </ResponseField>
+    <ResponseField name="ratingChange" type="number">
+      Difference between `newRating` and `oldRating`. Negative for contests where rating dropped.
+    </ResponseField>
+    <ResponseField name="solvedProblems" type="number">
+      Number of problems the student accepted during the contest, derived from their stored submission history.
+    </ResponseField>
+    <ResponseField name="totalProblems" type="number">
+      Total number of problems in the contest, fetched from the Codeforces standings API and cached in Redis for 7 days.
+    </ResponseField>
+    <ResponseField name="unsolvedProblems" type="number">
+      `max(totalProblems - solvedProblems, 0)`. Always non-negative.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Caching
+
+Contest history responses are cached in Redis under the key `cf:contest-history:<handle>:<days>` for **12 hours**. A cache hit skips the MongoDB query and all per-contest lookups entirely.
+
+Per-contest problem counts (used to populate `totalProblems`) are fetched from the Codeforces standings API and cached separately under `cf:contest-problems:<contestId>` for **7 days**. Because a contest's problem set never changes after it ends, this TTL effectively makes those entries permanent for practical purposes.
+
+## Example request
+
+```bash
+curl "https://your-api-host/api/codeforces/contest/tourist?days=90"
+```
+
+## Example response
+
+```json
+{
+  "contestStats": [
+    {
+      "contestId": 1923,
+      "contestName": "Codeforces Round 920 (Div. 3)",
+      "date": "2026-02-14",
+      "rank": 134,
+      "oldRating": 1742,
+      "newRating": 1798,
+      "ratingChange": 56,
+      "solvedProblems": 5,
+      "totalProblems": 7,
+      "unsolvedProblems": 2
+    },
+    {
+      "contestId": 1956,
+      "contestName": "Codeforces Round 937 (Div. 1)",
+      "date": "2026-03-22",
+      "rank": 412,
+      "oldRating": 1798,
+      "newRating": 1763,
+      "ratingChange": -35,
+      "solvedProblems": 2,
+      "totalProblems": 6,
+      "unsolvedProblems": 4
+    },
+    {
+      "contestId": 1987,
+      "contestName": "Codeforces Round 950 (Div. 2)",
+      "date": "2026-04-30",
+      "rank": 89,
+      "oldRating": 1763,
+      "newRating": 1841,
+      "ratingChange": 78,
+      "solvedProblems": 4,
+      "totalProblems": 5,
+      "unsolvedProblems": 1
+    }
+  ]
+}
+```
+
+## Error responses
+
+| Status | Cause |
+| ------ | ----- |
+| `404`  | No student with the given Codeforces handle found in the database |
+| `500`  | Server error while retrieving or processing contest data |
+
+```json
+{
+  "error": "Student not found"
+}
+```
+
+```json
+{
+  "error": "Internal server error"
+}
+```
+
+<Note>
+  `totalProblems` may be `0` for very old contests. When the Codeforces standings API returns a `400` error for a given `contestId` — which can happen for deprecated or removed contests — the server caches `0` for that contest and `unsolvedProblems` will also be `0`.
+</Note>

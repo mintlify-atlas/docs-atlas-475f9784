@@ -1,0 +1,115 @@
+---
+title: "How Codeforces data sync works in SkillSync"
+description: "SkillSync syncs each student's Codeforces profile, contests, and submissions automatically daily and on-demand. Learn how sync and caching work."
+---
+
+SkillSync keeps student data current by fetching it directly from the Codeforces public API. Syncs run automatically every day via an external cron trigger, and can also be started manually per student or for all students at once. A Redis caching layer sits in front of every Codeforces API call to reduce external requests and keep the dashboard fast during reads.
+
+## What gets synced
+
+Every sync run fetches and stores the following fields for each student:
+
+| Field | Source | Description |
+|---|---|---|
+| `currRating` | `user.info` | Student's current Codeforces rating |
+| `rank` | `user.info` | Codeforces rank label (e.g. "Expert") |
+| `maxRating` | `user.info` | Highest rating the student has ever reached |
+| `lastSyncedAt` | System clock | Timestamp set at the end of a successful sync |
+| `contestData` | `user.rating` | Complete contest rating history |
+| `submissions` | `user.status` | Up to 10,000 most recent submissions |
+| `lastActiveAt` | Derived | Date of the most recent accepted (`OK`) submission |
+
+## Automated daily sync
+
+SkillSync uses [cron-job.org](https://cron-job.org) to trigger a daily sync. The external scheduler sends a `POST` request to:
+
+```
+POST /cron/sync
+```
+
+The request must include the `x-cron-secret` header matching the `CRON_SECRET` environment variable. If the secret is missing or incorrect, the endpoint returns `401 Unauthorized` and no sync runs.
+
+When authenticated, the handler calls `runCodeforcesSync()`, which iterates over every student in MongoDB:
+
+<Steps>
+  <Step title="Invalidate cache">
+    Redis keys `cf:info:handle`, `cf:contest:handle`, and `cf:submissions:handle` are deleted so the next fetch always goes to the Codeforces API.
+  </Step>
+  <Step title="Fetch fresh data">
+    `user.info`, `user.rating`, and `user.status` (up to 10,000 submissions) are fetched in parallel from Codeforces.
+  </Step>
+  <Step title="Update MongoDB">
+    The student document is updated with the new rating, rank, max rating, contest history, submissions, `lastSyncedAt`, and `lastActiveAt`.
+  </Step>
+  <Step title="Check inactivity">
+    If the student has been inactive for 7 or more days and has not yet received an inactivity email this streak, a reminder email is sent and `emailRemindersSent` is incremented.
+  </Step>
+</Steps>
+
+## Manual sync options
+
+### Per-student sync
+
+Each row in the student table has a sync icon button. Clicking it calls:
+
+```
+GET /api/codeforces/sync/:handle
+```
+
+This invalidates the Redis cache for that handle, fetches fresh data from Codeforces, and updates the student's MongoDB document. The button shows a spinner while the request is in flight and a brief confirmation state on success.
+
+### Sync All
+
+The **Sync All** button in the dashboard toolbar triggers a bulk sync:
+
+```
+POST /cron/sync-all
+```
+
+This runs the same `runCodeforcesSync()` loop as the automated daily sync but without requiring the cron secret header. The UI shows a "Background sync started…" banner immediately and then refreshes the student list after a short delay to give the async operation time to complete.
+
+<Note>
+  On Render's free tier, syncing a large number of students can take several seconds per student due to cold-start latency and Codeforces API rate limits. The endpoint returns `200 OK` immediately with `{ "message": "Sync started" }` and runs the sync asynchronously so the request does not time out.
+</Note>
+
+## Cache invalidation on sync
+
+Before fetching from Codeforces, every sync call explicitly deletes three Redis keys for the student's handle:
+
+```javascript
+await Promise.all([
+  redis.del(`cf:info:${handle}`),
+  redis.del(`cf:contest:${handle}`),
+  redis.del(`cf:submissions:${handle}`),
+]);
+```
+
+This guarantees that the subsequent fetch always retrieves live data rather than a stale cached response.
+
+## Redis caching layer
+
+After fetching from Codeforces, responses are written to Upstash Redis with the following TTLs:
+
+| Data type | Cache key | TTL |
+|---|---|---|
+| User profile | `cf:info:handle` | 6 hours |
+| Contest history | `cf:contest:handle` | 6 hours |
+| Submissions | `cf:submissions:handle` | 2 hours |
+| Contest problem counts | `cf:contest-problems:contestId` | 7 days |
+| Full contest stats response | `cf:contest-history:handle:days` | 12 hours |
+
+During dashboard reads (stats pages, contest history), the service checks Redis first. A cache hit avoids a Codeforces API call entirely. A cache miss fetches live data, writes it to Redis, then returns it to the caller.
+
+## Inactivity tracking
+
+`lastActiveAt` is computed at the end of every sync by finding the most recent submission where `verdict === "OK"` and converting its Unix timestamp to a JavaScript `Date`. If no accepted submission exists, `lastActiveAt` is set to `null`.
+
+The number of inactive days is then:
+
+```javascript
+const inactiveDays = lastActiveAt
+  ? (Date.now() - lastActiveAt.getTime()) / (1000 * 60 * 60 * 24)
+  : Infinity;
+```
+
+When `inactiveDays >= 7`, the sync loop checks whether an inactivity email should be sent. See [Automated inactivity email alerts](/features/inactivity-alerts) for the full trigger logic.

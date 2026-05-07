@@ -1,0 +1,106 @@
+{
+  "projectType": "saas",
+  "projectName": "SkillSync",
+  "projectDescription": "A MERN stack platform that tracks students' Codeforces competitive programming progress with automated daily sync, inactivity email alerts, rating analytics, and personalized dashboards.",
+  "theme": "luma",
+  "primaryColor": "#0448c4",
+  "lightColor": "#043081",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "deployment"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/student-management",
+              "features/codeforces-sync",
+              "features/analytics-dashboard",
+              "features/inactivity-alerts"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/cron-jobs",
+              "configuration/email-setup"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Students",
+            "pages": [
+              "api/students/overview",
+              "api/students/list",
+              "api/students/create",
+              "api/students/update",
+              "api/students/delete"
+            ]
+          },
+          {
+            "group": "Codeforces",
+            "pages": [
+              "api/codeforces/sync",
+              "api/codeforces/stats",
+              "api/codeforces/contests"
+            ]
+          },
+          {
+            "group": "System",
+            "pages": [
+              "api/system/cron",
+              "api/system/inactivity"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Student CRUD management with Codeforces handle tracking",
+    "Automated daily Codeforces data sync via scheduled cron jobs",
+    "Manual per-student and bulk sync from the dashboard UI",
+    "Submission heatmap visualization for activity tracking",
+    "Rating history chart and contest performance breakdown",
+    "Problems-by-difficulty bar chart with rating bucket distribution",
+    "Topic/tag breakdown analytics with solved counts and average ratings",
+    "Consistency score, learning velocity, and predicted rating metrics",
+    "Inactivity detection with automated email reminders via Nodemailer/Brevo",
+    "Per-student email reminder toggle (enable/disable)",
+    "Redis caching layer (Upstash) for Codeforces API responses",
+    "Dark/light mode theme toggle",
+    "Sortable, searchable student table with real-time summary stats"
+  ],
+  "publicApiSurface": [
+    "GET /api/students — list all students",
+    "GET /api/students/:id — get student by ID",
+    "POST /api/students — create student (triggers immediate CF sync)",
+    "PUT /api/students/:id — update student",
+    "PUT /api/students/:id/toggle-reminder — enable/disable email reminders",
+    "DELETE /api/students/:id — delete student",
+    "GET /api/codeforces/sync/:handle — trigger manual sync for a handle",
+    "GET /api/codeforces/stats/:handle?days= — get submission stats for a handle",
+    "GET /api/codeforces/contest/:handle?days= — get contest history for a handle",
+    "POST /cron/sync — externally-triggered full sync (requires x-cron-secret header)",
+    "POST /cron/sync-all — manual full sync from UI",
+    "GET /cron/ping — keep-alive ping endpoint",
+    "GET /api/inactivity/logs — get inactivity log for all students",
+    "POST /api/inactivity/disable/:id — disable email reminders for a student",
+    "POST /api/inactivity/enable/:id — enable email reminders for a student",
+    "GET /health — health check endpoint"
+  ]
+}

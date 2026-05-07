@@ -1,0 +1,132 @@
+---
+title: "Deploy SkillSync to Vercel, Render, and MongoDB Atlas"
+description: "Step-by-step guide to deploying SkillSync's frontend on Vercel, backend on Render's free tier, and database on MongoDB Atlas with Redis caching."
+---
+
+The recommended production stack for SkillSync uses four managed services: MongoDB Atlas for the database, Upstash Redis for caching, Render for the Node/Express backend, and Vercel for the React frontend. All four have free tiers that are sufficient for running SkillSync for a class or club.
+
+<Steps>
+  <Step title="Set up MongoDB Atlas">
+    1. Create a free account at [mongodb.com/atlas](https://www.mongodb.com/atlas) and provision a new **M0 (free)** cluster in the region closest to your users.
+    2. Create a database user with read/write access. Save the username and password.
+    3. Click **Connect** → **Drivers** and copy the connection string. Replace `<password>` with your database user's password:
+
+    ```
+    mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/skillsync
+    ```
+
+    4. Under **Network Access**, add an IP address entry of `0.0.0.0/0` to allow inbound connections from Render. Render's outbound IPs are not static, so this wildcard is required.
+
+    Save the full connection string — this is your `MONGO_URI` environment variable.
+  </Step>
+
+  <Step title="Set up Upstash Redis">
+    1. Create a free account at [upstash.com](https://upstash.com) and create a new **Redis** database. Choose the region closest to your Render backend.
+    2. Open the database and navigate to the **REST API** tab.
+    3. Copy the two values shown:
+       - **UPSTASH_REDIS_REST_URL** — the HTTPS endpoint for your Redis instance
+       - **UPSTASH_REDIS_REST_TOKEN** — the bearer token for authenticating REST requests
+
+    SkillSync uses the `@upstash/redis` client, which communicates over HTTPS — no TCP connection or open port is needed.
+  </Step>
+
+  <Step title="Deploy the backend on Render">
+    1. Create a free account at [render.com](https://render.com) and click **New → Web Service**.
+    2. Connect your GitHub repository and configure the service:
+
+    | Setting | Value |
+    |---|---|
+    | Root directory | `backend` |
+    | Build command | `npm install` |
+    | Start command | `node index.js` |
+    | Instance type | Free |
+
+    3. Under **Environment Variables**, add every variable listed below. Click **Add Environment Variable** for each one:
+
+    | Variable | Description |
+    |---|---|
+    | `PORT` | Set to `5000` (Render also injects its own `PORT`, but setting it explicitly avoids surprises) |
+    | `MONGO_URI` | Full MongoDB Atlas connection string from Step 1 |
+    | `UPSTASH_REDIS_REST_URL` | Upstash Redis HTTPS endpoint from Step 2 |
+    | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis bearer token from Step 2 |
+    | `BREVO_USER` | Your Brevo SMTP login email |
+    | `BREVO_PASS` | Your Brevo SMTP password |
+    | `EMAIL_USER` | The sender address for inactivity alert emails |
+    | `CRON_SECRET` | Any long random string — used to authenticate `/cron/sync` requests |
+
+    4. Click **Create Web Service**. Render will build and deploy the backend. Note the public URL (e.g. `https://skillsync-api.onrender.com`) — you'll need it in the next steps.
+
+    <Note>
+    Confirm the deployment succeeded by visiting `GET https://your-app.onrender.com/health`. It should return `{"status":"ok","time":"..."}`.
+    </Note>
+  </Step>
+
+  <Step title="Set up cron-job.org">
+    Render's free tier spins down services after 15 minutes of inactivity. SkillSync uses two cron jobs on [cron-job.org](https://cron-job.org) to handle this:
+
+    **Job 1 — Daily Codeforces sync**
+
+    Create a cron job with these settings:
+
+    | Setting | Value |
+    |---|---|
+    | URL | `https://your-app.onrender.com/cron/sync` |
+    | Method | `POST` |
+    | Header | `x-cron-secret: <your CRON_SECRET value>` |
+    | Schedule | Every day at 02:00 UTC |
+
+    This triggers `runCodeforcesSync()` on the backend, which fetches updated data from the Codeforces API for every student. The backend responds immediately with `{"message":"Sync started"}` so cron-job.org doesn't time out, then continues the sync in the background.
+
+    **Job 2 — Keep-alive ping**
+
+    Create a second cron job:
+
+    | Setting | Value |
+    |---|---|
+    | URL | `https://your-app.onrender.com/cron/ping` |
+    | Method | `GET` |
+    | Schedule | Every 14 minutes |
+
+    This hits the `/cron/ping` endpoint, which returns `{"status":"alive"}` and keeps the Render instance warm so students don't experience a 10-second cold start when they open the app.
+
+    <Warning>
+    Without the keep-alive ping, Render will shut down the backend after inactivity. The next request after a cold start can take 10+ seconds to respond. The ping job prevents this on the free tier.
+    </Warning>
+  </Step>
+
+  <Step title="Deploy the frontend on Vercel">
+    1. Create a free account at [vercel.com](https://vercel.com) and click **Add New → Project**.
+    2. Import your GitHub repository and configure the project:
+
+    | Setting | Value |
+    |---|---|
+    | Framework preset | Vite |
+    | Root directory | `frontend` |
+    | Build command | `npm run build` |
+    | Output directory | `dist` |
+
+    3. Under **Environment Variables**, add:
+
+    | Variable | Value |
+    |---|---|
+    | `VITE_API_BASE_URL` | Your Render backend URL (e.g. `https://skillsync-api.onrender.com`) |
+
+    4. Click **Deploy**. Vercel builds the React app and publishes it to a `*.vercel.app` subdomain (or your custom domain if configured).
+
+    Once the deployment finishes, open the Vercel URL in your browser and add a student to confirm the frontend can reach the backend successfully.
+  </Step>
+</Steps>
+
+## Environment variables reference
+
+| Variable | Required | Description |
+|---|---|---|
+| `PORT` | Backend | Port the Express server listens on (default `5000`) |
+| `MONGO_URI` | Backend | MongoDB Atlas connection string |
+| `UPSTASH_REDIS_REST_URL` | Backend | Upstash Redis HTTPS endpoint |
+| `UPSTASH_REDIS_REST_TOKEN` | Backend | Upstash Redis authentication token |
+| `BREVO_USER` | Backend | Brevo SMTP username for sending emails |
+| `BREVO_PASS` | Backend | Brevo SMTP password |
+| `EMAIL_USER` | Backend | Sender address shown in inactivity alert emails |
+| `CRON_SECRET` | Backend | Secret token required in `x-cron-secret` header for `/cron/sync` |
+| `VITE_API_BASE_URL` | Frontend | Full URL of the Render backend (no trailing slash) |
